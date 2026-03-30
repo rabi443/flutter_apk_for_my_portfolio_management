@@ -3,7 +3,7 @@ import '../services/api_service.dart';
 
 class DataScreen extends StatefulWidget {
   final String title;
-  final String endpoint; // e.g., "skills", "projects", "users"
+  final String endpoint;
 
   DataScreen({required this.title, required this.endpoint});
 
@@ -21,7 +21,6 @@ class _DataScreenState extends State<DataScreen> {
     fetchData();
   }
 
-  // Fetch all data from API
   void fetchData() async {
     setState(() => loading = true);
     try {
@@ -32,13 +31,11 @@ class _DataScreenState extends State<DataScreen> {
       });
     } catch (e) {
       setState(() => loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to fetch data: $e")),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Failed to fetch data: $e")));
     }
   }
 
-  // Delete item with confirmation
   void confirmDelete(dynamic id) async {
     bool confirm = await showDialog(
       context: context,
@@ -46,48 +43,35 @@ class _DataScreenState extends State<DataScreen> {
         title: Text("Confirm Delete"),
         content: Text("Are you sure you want to delete this item?"),
         actions: [
-          TextButton(
-            child: Text("Cancel"),
-            onPressed: () => Navigator.pop(context, false),
-          ),
+          TextButton(child: Text("Cancel"), onPressed: () => Navigator.pop(context, false)),
           ElevatedButton(
             child: Text("Delete"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(context, true),
           ),
         ],
       ),
     );
 
-    if (confirm) {
-      deleteItem(id);
-    }
+    if (confirm) deleteItem(id);
   }
 
-  // Delete item using API
   void deleteItem(dynamic id) async {
     int parsedId = int.parse(id.toString());
     bool success = await ApiService.deleteData(widget.endpoint, parsedId);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(success ? "Deleted successfully" : "Failed to delete"),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(success ? "Deleted successfully" : "Failed to delete"),
+      duration: Duration(seconds: 2),
+    ));
     if (success) fetchData();
   }
 
-  // Open dialog for editing or creating item
   void openForm({Map<String, dynamic>? item}) {
     final _formKey = GlobalKey<FormState>();
     Map<String, dynamic> formData = item != null ? Map.from(item) : {};
-
-    // Determine which fields to show
     List<String> allowedFields;
     if (widget.endpoint == 'users') {
-      allowedFields = ['name', 'email', 'password']; // Only these fields for users
+      allowedFields = ['name', 'email', 'password'];
     } else {
       allowedFields = data.isNotEmpty
           ? data[0].keys
@@ -113,7 +97,7 @@ class _DataScreenState extends State<DataScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: TextFormField(
                       initialValue: initialValue,
-                      obscureText: k == 'password', // Hide password input
+                      obscureText: k == 'password',
                       decoration: InputDecoration(
                         labelText: k,
                         border: OutlineInputBorder(),
@@ -129,10 +113,7 @@ class _DataScreenState extends State<DataScreen> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("Cancel"),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text("Cancel")),
             ElevatedButton(
               onPressed: () async {
                 if (_formKey.currentState!.validate()) {
@@ -141,30 +122,20 @@ class _DataScreenState extends State<DataScreen> {
                   try {
                     if (item != null) {
                       int parsedId = int.parse(item['id'].toString());
-                      success = await ApiService.updateData(
-                          widget.endpoint, parsedId, formData);
+                      success = await ApiService.updateData(widget.endpoint, parsedId, formData);
                     } else {
                       success = await ApiService.createData(widget.endpoint, formData);
                     }
-
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(success
-                            ? (item != null ? "Updated!" : "Created!")
-                            : "Failed"),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(success ? (item != null ? "Updated!" : "Created!") : "Failed"),
+                      duration: Duration(seconds: 2),
+                    ));
                     if (success) fetchData();
                   } catch (e) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text("Error: $e"),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
+                        SnackBar(content: Text("Error: $e"), duration: Duration(seconds: 2)));
                   }
                 }
               },
@@ -179,12 +150,16 @@ class _DataScreenState extends State<DataScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: Colors.deepPurple,
-      ),
+      appBar: AppBar(title: Text(widget.title), backgroundColor: Colors.deepPurple),
       body: loading
           ? Center(child: CircularProgressIndicator())
+          : data.isEmpty
+          ? Center(
+        child: Text(
+          "No records found",
+          style: TextStyle(fontSize: 18, color: Colors.grey),
+        ),
+      )
           : SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Container(
@@ -194,8 +169,7 @@ class _DataScreenState extends State<DataScreen> {
                     (states) => Colors.deepPurple.shade100),
             columnSpacing: 20,
             dataRowHeight: 60,
-            columns: data.isNotEmpty
-                ? [
+            columns: [
               ...data[0].keys
                   .map<DataColumn>((k) => DataColumn(
                 label: Text(
@@ -210,29 +184,22 @@ class _DataScreenState extends State<DataScreen> {
                   label: Text(
                     'Actions',
                     style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.deepPurple),
+                        fontWeight: FontWeight.bold, color: Colors.deepPurple),
                   )),
-            ]
-                : [],
+            ],
             rows: data
                 .map<DataRow>((item) => DataRow(cells: [
               ...item.values
-                  .map<DataCell>((v) => DataCell(
-                Text(v.toString()),
-              ))
+                  .map<DataCell>((v) => DataCell(Text(v.toString())))
                   .toList(),
               DataCell(Row(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.edit, color: Colors.blue),
-                    onPressed: () => openForm(item: item),
-                  ),
+                      icon: Icon(Icons.edit, color: Colors.blue),
+                      onPressed: () => openForm(item: item)),
                   IconButton(
-                    icon: Icon(Icons.delete, color: Colors.red),
-                    onPressed: () =>
-                        confirmDelete(item['id']),
-                  ),
+                      icon: Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => confirmDelete(item['id'])),
                 ],
               ))
             ]))

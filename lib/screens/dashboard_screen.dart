@@ -2,9 +2,42 @@ import 'package:flutter/material.dart';
 import 'data_screen.dart';
 import 'login_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart';
 
-class DashboardScreen extends StatelessWidget {
-  // Logout function with confirmation
+class DashboardScreen extends StatefulWidget {
+  @override
+  _DashboardScreenState createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  int unreadMessages = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchUnreadCount();
+  }
+
+  // ✅ FIXED METHOD
+  void fetchUnreadCount() async {
+    try {
+      int count = await ApiService.getUnreadCount();
+      setState(() => unreadMessages = count);
+    } catch (e) {
+      if (e.toString().contains("unauthorized")) {
+        redirectToLogin();
+      }
+    }
+  }
+
+  void redirectToLogin() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => LoginScreen()),
+          (route) => false,
+    );
+  }
+
   void logout(BuildContext context) async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -13,15 +46,12 @@ class DashboardScreen extends StatelessWidget {
         content: const Text("Are you sure you want to logout?"),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel"),
-          ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text("Cancel")),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              "Logout",
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text("Logout",
+                style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -30,21 +60,37 @@ class DashboardScreen extends StatelessWidget {
     if (confirm != null && confirm) {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.remove('token');
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => LoginScreen()),
-            (route) => false,
-      );
+      redirectToLogin();
     }
   }
 
-  Widget buildMenuItem(BuildContext context, String title, String endpoint) {
+  Widget buildMenuItem(BuildContext context, String title, String endpoint,
+      {int badgeCount = 0}) {
     return Card(
       margin: EdgeInsets.symmetric(vertical: 8),
       elevation: 5,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape:
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
+            if (badgeCount > 0) ...[
+              SizedBox(width: 8),
+              Container(
+                padding:
+                EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(12)),
+                child: Text(
+                  badgeCount.toString(),
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              )
+            ]
+          ],
+        ),
         trailing: Icon(Icons.arrow_forward_ios),
         onTap: () {
           if (title == "Logout") {
@@ -53,9 +99,9 @@ class DashboardScreen extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => DataScreen(title: title, endpoint: endpoint),
-              ),
-            );
+                  builder: (_) =>
+                      DataScreen(title: title, endpoint: endpoint)),
+            ).then((_) => fetchUnreadCount());
           }
         },
       ),
@@ -65,7 +111,8 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Admin Dashboard"), centerTitle: true),
+      appBar:
+      AppBar(title: Text("Admin Dashboard"), centerTitle: true),
       body: Container(
         padding: EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -79,7 +126,12 @@ class DashboardScreen extends StatelessWidget {
           children: [
             buildMenuItem(context, "Manage Users", "users"),
             buildMenuItem(context, "Manage Personal Information", "personal-info"),
-            buildMenuItem(context, "Manage Visitors Messages", "contact-messages"),
+            buildMenuItem(
+              context,
+              "Manage Visitors Messages",
+              "contact-messages",
+              badgeCount: unreadMessages,
+            ),
             buildMenuItem(context, "Manage Projects", "projects"),
             buildMenuItem(context, "Manage Skills", "skills"),
             buildMenuItem(context, "Logout", ""),
