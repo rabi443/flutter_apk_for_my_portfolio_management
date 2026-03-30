@@ -4,14 +4,38 @@ import 'login_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardScreen extends StatelessWidget {
+  // Logout function with confirmation
   void logout(BuildContext context) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => LoginScreen()),
-          (route) => false,
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirm Logout"),
+        content: const Text("Are you sure you want to logout?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "Logout",
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
     );
+
+    if (confirm != null && confirm) {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.remove('token');
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LoginScreen()),
+            (route) => false,
+      );
+    }
   }
 
   Widget buildMenuItem(BuildContext context, String title, String endpoint) {
@@ -41,7 +65,7 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Admin Dashboard")),
+      appBar: AppBar(title: Text("Admin Dashboard"), centerTitle: true),
       body: Container(
         padding: EdgeInsets.all(16),
         decoration: BoxDecoration(

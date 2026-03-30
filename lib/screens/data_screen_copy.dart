@@ -84,6 +84,18 @@ class _DataScreenState extends State<DataScreen> {
     final _formKey = GlobalKey<FormState>();
     Map<String, dynamic> formData = item != null ? Map.from(item) : {};
 
+    // Determine which fields to show
+    List<String> allowedFields;
+    if (widget.endpoint == 'users') {
+      allowedFields = ['name', 'email', 'password']; // Only these fields for users
+    } else {
+      allowedFields = data.isNotEmpty
+          ? data[0].keys
+          .where((k) => k != 'id' && k != 'created_at' && k != 'updated_at')
+          .toList()
+          : [];
+    }
+
     showDialog(
       context: context,
       builder: (context) {
@@ -94,32 +106,25 @@ class _DataScreenState extends State<DataScreen> {
               key: _formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: data.isNotEmpty
-                    ? data[0].keys
-                // Hide Laravel auto-handled fields
-                    .where((k) =>
-                k != 'id' &&
-                    k != 'created_at' &&
-                    k != 'updated_at')
-                    .map<Widget>((k) => Padding(
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 8.0),
-                  child: TextFormField(
-                    initialValue: formData[k]?.toString() ?? '',
-                    decoration: InputDecoration(
-                      labelText: k,
-                      border: OutlineInputBorder(),
-                      filled: true,
-                      fillColor: Colors.grey[100],
+                children: allowedFields.map<Widget>((k) {
+                  String? initialValue =
+                  (k == 'password' && item != null) ? '' : formData[k]?.toString() ?? '';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: TextFormField(
+                      initialValue: initialValue,
+                      obscureText: k == 'password', // Hide password input
+                      decoration: InputDecoration(
+                        labelText: k,
+                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.grey[100],
+                      ),
+                      onSaved: (val) => formData[k] = val,
+                      validator: (val) => val == null || val.isEmpty ? 'Required' : null,
                     ),
-                    onSaved: (val) => formData[k] = val,
-                    validator: (val) => val == null || val.isEmpty
-                        ? 'Required'
-                        : null,
-                  ),
-                ))
-                    .toList()
-                    : <Widget>[],
+                  );
+                }).toList(),
               ),
             ),
           ),
@@ -139,8 +144,7 @@ class _DataScreenState extends State<DataScreen> {
                       success = await ApiService.updateData(
                           widget.endpoint, parsedId, formData);
                     } else {
-                      success =
-                      await ApiService.createData(widget.endpoint, formData);
+                      success = await ApiService.createData(widget.endpoint, formData);
                     }
 
                     Navigator.pop(context);
@@ -226,7 +230,8 @@ class _DataScreenState extends State<DataScreen> {
                   ),
                   IconButton(
                     icon: Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => confirmDelete(item['id']),
+                    onPressed: () =>
+                        confirmDelete(item['id']),
                   ),
                 ],
               ))
