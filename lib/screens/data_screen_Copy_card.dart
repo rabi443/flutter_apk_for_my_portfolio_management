@@ -36,6 +36,7 @@ class _DataScreenState extends State<DataScreen> {
   Future<void> checkInternet() async {
     var connectivityResult = await Connectivity().checkConnectivity();
     bool nowConnected = connectivityResult != ConnectivityResult.none;
+
     setState(() => isConnected = nowConnected);
 
     if (!nowConnected) {
@@ -98,9 +99,7 @@ class _DataScreenState extends State<DataScreen> {
         title: const Text("Confirm Delete"),
         content: const Text("Are you sure you want to delete this item?"),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -108,8 +107,7 @@ class _DataScreenState extends State<DataScreen> {
           ),
         ],
       ),
-    ) ??
-        false;
+    ) ?? false;
 
     if (confirm) deleteItem(id);
   }
@@ -139,10 +137,7 @@ class _DataScreenState extends State<DataScreen> {
     List<String> allowedFields = widget.endpoint == 'users'
         ? ['name', 'email', 'password']
         : data.isNotEmpty
-        ? data[0]
-        .keys
-        .where((k) => k != 'id' && k != 'created_at' && k != 'updated_at')
-        .toList()
+        ? data[0].keys.where((k) => k != 'id' && k != 'created_at' && k != 'updated_at').toList()
         : [];
 
     showDialog(
@@ -156,8 +151,7 @@ class _DataScreenState extends State<DataScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: allowedFields.map((k) {
-                  String initialValue =
-                  (k == 'password' && item != null) ? '' : formData[k]?.toString() ?? '';
+                  String initialValue = (k == 'password' && item != null) ? '' : formData[k]?.toString() ?? '';
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: TextFormField(
@@ -190,6 +184,7 @@ class _DataScreenState extends State<DataScreen> {
 
                 if (_formKey.currentState!.validate()) {
                   _formKey.currentState!.save();
+
                   bool success = false;
                   try {
                     if (item != null) {
@@ -208,8 +203,9 @@ class _DataScreenState extends State<DataScreen> {
                     if (success) fetchData();
                   } catch (e) {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text("Error: $e")));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text("Error: $e")),
+                    );
                   }
                 }
               },
@@ -221,6 +217,7 @@ class _DataScreenState extends State<DataScreen> {
     );
   }
 
+  // 📊 Export Excel
   Future<void> exportExcel() async {
     if (data.isEmpty) return;
 
@@ -293,27 +290,20 @@ class _DataScreenState extends State<DataScreen> {
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columns: data.isNotEmpty
-                      ? [
-                    ...data[0].keys
-                        .map((key) => DataColumn(
-                        label: Text(key.toString(),
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold))))
-                        .toList(),
-                    const DataColumn(label: Text('Actions')),
-                  ]
-                      : [],
-                  rows: pageData
-                      .map(
-                        (item) => DataRow(cells: [
-                      ...item.values
-                          .map((value) => DataCell(Text(value.toString())))
-                          .toList(),
-                      DataCell(Row(
+              child: ListView.builder(
+                itemCount: pageData.length,
+                itemBuilder: (context, index) {
+                  var item = pageData[index];
+                  return Card(
+                    margin: const EdgeInsets.all(8),
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: ListTile(
+                      title: Text(item.values.first.toString(),
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(item.values.skip(1).map((v) => v.toString()).join(", ")),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
@@ -322,11 +312,10 @@ class _DataScreenState extends State<DataScreen> {
                               icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () => confirmDelete(item['id'])),
                         ],
-                      )),
-                    ]),
-                  )
-                      .toList(),
-                ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
             if (totalPages > 1)
@@ -335,15 +324,12 @@ class _DataScreenState extends State<DataScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.chevron_left),
-                    onPressed:
-                    currentPage > 1 ? () => setState(() => currentPage--) : null,
+                    onPressed: currentPage > 1 ? () => setState(() => currentPage--) : null,
                   ),
                   Text("Page $currentPage / $totalPages"),
                   IconButton(
                     icon: const Icon(Icons.chevron_right),
-                    onPressed: currentPage < totalPages
-                        ? () => setState(() => currentPage++)
-                        : null,
+                    onPressed: currentPage < totalPages ? () => setState(() => currentPage++) : null,
                   ),
                 ],
               ),

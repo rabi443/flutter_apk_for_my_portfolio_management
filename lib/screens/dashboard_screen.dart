@@ -3,6 +3,7 @@ import 'data_screen.dart';
 import 'login_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 class DashboardScreen extends StatefulWidget {
   @override
@@ -11,14 +12,48 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int unreadMessages = 0;
+  bool isConnected = true;
 
   @override
   void initState() {
     super.initState();
+    checkInternet();
     fetchUnreadCount();
   }
 
-  // ✅ FIXED METHOD
+  // 🌐 Check Internet
+  Future<void> checkInternet() async {
+    var connectivityResult = await Connectivity().checkConnectivity();
+
+    bool nowConnected = connectivityResult != ConnectivityResult.none;
+
+    setState(() {
+      isConnected = nowConnected;
+    });
+
+    if (!nowConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("No Internet Connection ❌"),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  // 🔄 Pull to Refresh
+  Future<void> refreshPage() async {
+    await checkInternet();
+
+    if (isConnected) {
+      fetchUnreadCount(); // reload data
+    }
+
+    await Future.delayed(const Duration(milliseconds: 800));
+  }
+
+  // 📩 Fetch unread messages
   void fetchUnreadCount() async {
     try {
       int count = await ApiService.getUnreadCount();
@@ -67,31 +102,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget buildMenuItem(BuildContext context, String title, String endpoint,
       {int badgeCount = 0}) {
     return Card(
-      margin: EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       elevation: 5,
       shape:
       RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         title: Row(
           children: [
-            Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
             if (badgeCount > 0) ...[
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Container(
                 padding:
-                EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                     color: Colors.red,
                     borderRadius: BorderRadius.circular(12)),
                 child: Text(
                   badgeCount.toString(),
-                  style: TextStyle(color: Colors.white, fontSize: 12),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               )
             ]
           ],
         ),
-        trailing: Icon(Icons.arrow_forward_ios),
+        trailing: const Icon(Icons.arrow_forward_ios),
         onTap: () {
           if (title == "Logout") {
             logout(context);
@@ -112,30 +147,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar:
-      AppBar(title: Text("Admin Dashboard"), centerTitle: true),
-      body: Container(
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.blue.shade200, Colors.purple.shade200],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: ListView(
-          children: [
-            buildMenuItem(context, "Manage Users", "users"),
-            buildMenuItem(context, "Manage Personal Information", "personal-info"),
-            buildMenuItem(
-              context,
-              "Manage Visitors Messages",
-              "contact-messages",
-              badgeCount: unreadMessages,
+      AppBar(title: const Text("Admin Dashboard"), centerTitle: true),
+      body: RefreshIndicator(
+        onRefresh: refreshPage,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            height: MediaQuery.of(context).size.height,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade200, Colors.purple.shade200],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-            buildMenuItem(context, "Manage Projects", "projects"),
-            buildMenuItem(context, "Manage Skills", "skills"),
-            buildMenuItem(context, "Logout", ""),
-          ],
+            child: Column(
+              children: [
+                // 🌐 Internet warning
+                if (!isConnected)
+                  const Text(
+                    "No Internet Connection",
+                    style: TextStyle(color: Colors.red),
+                  ),
+
+                buildMenuItem(context, "Manage Users", "users"),
+                buildMenuItem(context, "Manage Personal Information", "personal-info"),
+                buildMenuItem(
+                  context,
+                  "Manage Visitors Messages",
+                  "contact-messages",
+                  badgeCount: unreadMessages,
+                ),
+                buildMenuItem(context, "Manage Projects", "projects"),
+                buildMenuItem(context, "Manage Skills", "skills"),
+                buildMenuItem(context, "Logout", ""),
+              ],
+            ),
+          ),
         ),
       ),
     );

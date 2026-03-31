@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:excel/excel.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class DataScreen extends StatefulWidget {
   final String title;
-  final String endpoint; // e.g., "skills", "projects", "users"
+  final String endpoint;
 
   DataScreen({required this.title, required this.endpoint});
 
@@ -13,22 +17,58 @@ class DataScreen extends StatefulWidget {
 
 class _DataScreenState extends State<DataScreen> {
   List<dynamic> data = [];
+  List<dynamic> filteredData = [];
   bool loading = true;
+  bool isConnected = true;
+
+  int currentPage = 1;
+  int perPage = 10;
+
+  TextEditingController searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    checkInternet();
     fetchData();
   }
 
-  // Fetch all data from API
+  Future<void> checkInternet() async {
+    var connectivityResult = await Connectivity().checkConnectivity();
+    bool nowConnected = connectivityResult != ConnectivityResult.none;
+    setState(() => isConnected = nowConnected);
+
+    if (!nowConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("No Internet Connection ❌"),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> refreshPage() async {
+    await checkInternet();
+    if (isConnected) fetchData();
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
   void fetchData() async {
+    if (!isConnected) {
+      setState(() => loading = false);
+      return;
+    }
+
     setState(() => loading = true);
     try {
       List<dynamic>? result = await ApiService.getData(widget.endpoint);
       setState(() {
         data = result ?? [];
+        filteredData = data;
         loading = false;
+        currentPage = 1;
       });
     } catch (e) {
       setState(() => loading = false);
@@ -38,63 +78,72 @@ class _DataScreenState extends State<DataScreen> {
     }
   }
 
-  // Delete item with confirmation
+  void filterData(String query) {
+    if (query.isEmpty) {
+      setState(() => filteredData = data);
+    } else {
+      setState(() {
+        filteredData = data
+            .where((item) => item.values
+            .any((v) => v.toString().toLowerCase().contains(query.toLowerCase())))
+            .toList();
+      });
+    }
+  }
+
   void confirmDelete(dynamic id) async {
     bool confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Confirm Delete"),
-        content: Text("Are you sure you want to delete this item?"),
+        title: const Text("Confirm Delete"),
+        content: const Text("Are you sure you want to delete this item?"),
         actions: [
           TextButton(
-            child: Text("Cancel"),
-            onPressed: () => Navigator.pop(context, false),
-          ),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancel")),
           ElevatedButton(
-            child: Text("Delete"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
             onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("Delete"),
           ),
         ],
       ),
-    );
+    ) ??
+        false;
 
-    if (confirm) {
-      deleteItem(id);
-    }
+    if (confirm) deleteItem(id);
   }
 
-  // Delete item using API
   void deleteItem(dynamic id) async {
+    if (!isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No Internet Connection")),
+      );
+      return;
+    }
+
     int parsedId = int.parse(id.toString());
     bool success = await ApiService.deleteData(widget.endpoint, parsedId);
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(success ? "Deleted successfully" : "Failed to delete"),
-        duration: Duration(seconds: 2),
-      ),
+      SnackBar(content: Text(success ? "Deleted successfully" : "Failed to delete")),
     );
+
     if (success) fetchData();
   }
 
-  // Open dialog for editing or creating item
   void openForm({Map<String, dynamic>? item}) {
     final _formKey = GlobalKey<FormState>();
     Map<String, dynamic> formData = item != null ? Map.from(item) : {};
 
-    // Determine which fields to show
-    List<String> allowedFields;
-    if (widget.endpoint == 'users') {
-      allowedFields = ['name', 'email', 'password']; // Only these fields for users
-    } else {
-      allowedFields = data.isNotEmpty
-          ? data[0].keys
-          .where((k) => k != 'id' && k != 'created_at' && k != 'updated_at')
-          .toList()
-          : [];
-    }
+    List<String> allowedFields = widget.endpoint == 'users'
+        ? ['name', 'email', 'password']
+        : data.isNotEmpty
+        ? data[0]
+        .keys
+        .where((k) => k != 'id' && k != 'created_at' && k != 'updated_at')
+        .toList()
+        : [];
 
     showDialog(
       context: context,
@@ -106,14 +155,14 @@ class _DataScreenState extends State<DataScreen> {
               key: _formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: allowedFields.map<Widget>((k) {
-                  String? initialValue =
+                children: allowedFields.map((k) {
+                  String initialValue =
                   (k == 'password' && item != null) ? '' : formData[k]?.toString() ?? '';
                   return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     child: TextFormField(
                       initialValue: initialValue,
-                      obscureText: k == 'password', // Hide password input
+                      obscureText: k == 'password',
                       decoration: InputDecoration(
                         labelText: k,
                         border: OutlineInputBorder(),
@@ -129,46 +178,42 @@ class _DataScreenState extends State<DataScreen> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("Cancel"),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
             ElevatedButton(
               onPressed: () async {
+                if (!isConnected) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("No Internet Connection")),
+                  );
+                  return;
+                }
+
                 if (_formKey.currentState!.validate()) {
                   _formKey.currentState!.save();
                   bool success = false;
                   try {
                     if (item != null) {
                       int parsedId = int.parse(item['id'].toString());
-                      success = await ApiService.updateData(
-                          widget.endpoint, parsedId, formData);
+                      success = await ApiService.updateData(widget.endpoint, parsedId, formData);
                     } else {
                       success = await ApiService.createData(widget.endpoint, formData);
                     }
 
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(success
-                            ? (item != null ? "Updated!" : "Created!")
-                            : "Failed"),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
+
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(success ? (item != null ? "Updated!" : "Created!") : "Failed"),
+                    ));
+
                     if (success) fetchData();
                   } catch (e) {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text("Error: $e"),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text("Error: $e")));
                   }
                 }
               },
-              child: Text("Submit"),
+              child: const Text("Submit"),
             ),
           ],
         );
@@ -176,74 +221,139 @@ class _DataScreenState extends State<DataScreen> {
     );
   }
 
+  Future<void> exportExcel() async {
+    if (data.isEmpty) return;
+
+    var excel = Excel.createExcel();
+    Sheet sheet = excel['Sheet1'];
+
+    sheet.appendRow(data[0].keys.map((k) => k.toString()).toList());
+
+    for (var item in data) {
+      sheet.appendRow(item.values.map((v) => v.toString()).toList());
+    }
+
+    Directory directory = await getApplicationDocumentsDirectory();
+    String filePath = "${directory.path}/${widget.title}.xlsx";
+
+    File(filePath)
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(excel.encode()!);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Excel exported: $filePath")),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    int totalPages = (filteredData.length / perPage).ceil();
+    int start = (currentPage - 1) * perPage;
+    int end = (start + perPage) > filteredData.length ? filteredData.length : (start + perPage);
+    List<dynamic> pageData = filteredData.sublist(start, end);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
         backgroundColor: Colors.deepPurple,
+        actions: [
+          IconButton(icon: const Icon(Icons.file_download), onPressed: exportExcel),
+        ],
       ),
-      body: loading
-          ? Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Container(
-          margin: EdgeInsets.all(12),
-          child: DataTable(
-            headingRowColor: MaterialStateColor.resolveWith(
-                    (states) => Colors.deepPurple.shade100),
-            columnSpacing: 20,
-            dataRowHeight: 60,
-            columns: data.isNotEmpty
-                ? [
-              ...data[0].keys
-                  .map<DataColumn>((k) => DataColumn(
-                label: Text(
-                  k.toString(),
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple),
+      body: RefreshIndicator(
+        onRefresh: refreshPage,
+        child: loading
+            ? ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 300),
+            Center(child: CircularProgressIndicator()),
+          ],
+        )
+            : Column(
+          children: [
+            if (!isConnected)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text(
+                  "No Internet Connection",
+                  style: TextStyle(color: Colors.red),
                 ),
-              ))
-                  .toList(),
-              DataColumn(
-                  label: Text(
-                    'Actions',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.deepPurple),
-                  )),
-            ]
-                : [],
-            rows: data
-                .map<DataRow>((item) => DataRow(cells: [
-              ...item.values
-                  .map<DataCell>((v) => DataCell(
-                Text(v.toString()),
-              ))
-                  .toList(),
-              DataCell(Row(
+              ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: TextField(
+                controller: searchController,
+                decoration: InputDecoration(
+                  hintText: "Search...",
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onChanged: filterData,
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: data.isNotEmpty
+                      ? [
+                    ...data[0].keys
+                        .map((key) => DataColumn(
+                        label: Text(key.toString(),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold))))
+                        .toList(),
+                    const DataColumn(label: Text('Actions')),
+                  ]
+                      : [],
+                  rows: pageData
+                      .map(
+                        (item) => DataRow(cells: [
+                      ...item.values
+                          .map((value) => DataCell(Text(value.toString())))
+                          .toList(),
+                      DataCell(Row(
+                        children: [
+                          IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () => openForm(item: item)),
+                          IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => confirmDelete(item['id'])),
+                        ],
+                      )),
+                    ]),
+                  )
+                      .toList(),
+                ),
+              ),
+            ),
+            if (totalPages > 1)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.edit, color: Colors.blue),
-                    onPressed: () => openForm(item: item),
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed:
+                    currentPage > 1 ? () => setState(() => currentPage--) : null,
                   ),
+                  Text("Page $currentPage / $totalPages"),
                   IconButton(
-                    icon: Icon(Icons.delete, color: Colors.red),
-                    onPressed: () =>
-                        confirmDelete(item['id']),
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: currentPage < totalPages
+                        ? () => setState(() => currentPage++)
+                        : null,
                   ),
                 ],
-              ))
-            ]))
-                .toList(),
-          ),
+              ),
+          ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => openForm(),
-        child: Icon(Icons.add),
         backgroundColor: Colors.deepPurple,
+        child: const Icon(Icons.add),
       ),
     );
   }

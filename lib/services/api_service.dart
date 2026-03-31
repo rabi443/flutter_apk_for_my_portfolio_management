@@ -33,6 +33,21 @@ class ApiService {
     return null;
   }
 
+  static Future forgotPassword(String email) async {
+    var response = await http.post(
+      Uri.parse('$baseUrl/forgot-password'),
+      body: {
+        'email': email,
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      return null;
+    }
+  }
+
   // GET DATA (IMPORTANT FIX)
   static Future<List<dynamic>> getData(String endpoint) async {
     String? token = await getToken();
