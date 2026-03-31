@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:excel/excel.dart';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 
 class DataScreen extends StatefulWidget {
   final String title;
@@ -51,17 +49,20 @@ class _DataScreenState extends State<DataScreen> {
 
   Future<void> refreshPage() async {
     await checkInternet();
-    if (isConnected) fetchData();
+    if (isConnected) {
+      await fetchData();
+    }
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
-  void fetchData() async {
+  Future<void> fetchData() async {
+    setState(() => loading = true);
+
     if (!isConnected) {
       setState(() => loading = false);
       return;
     }
 
-    setState(() => loading = true);
     try {
       List<dynamic>? result = await ApiService.getData(widget.endpoint);
       setState(() {
@@ -84,8 +85,8 @@ class _DataScreenState extends State<DataScreen> {
     } else {
       setState(() {
         filteredData = data
-            .where((item) => item.values
-            .any((v) => v.toString().toLowerCase().contains(query.toLowerCase())))
+            .where((item) => item.values.any(
+                (v) => v.toString().toLowerCase().contains(query.toLowerCase())))
             .toList();
       });
     }
@@ -108,8 +109,7 @@ class _DataScreenState extends State<DataScreen> {
           ),
         ],
       ),
-    ) ??
-        false;
+    ) ?? false;
 
     if (confirm) deleteItem(id);
   }
@@ -194,7 +194,8 @@ class _DataScreenState extends State<DataScreen> {
                   try {
                     if (item != null) {
                       int parsedId = int.parse(item['id'].toString());
-                      success = await ApiService.updateData(widget.endpoint, parsedId, formData);
+                      success =
+                      await ApiService.updateData(widget.endpoint, parsedId, formData);
                     } else {
                       success = await ApiService.createData(widget.endpoint, formData);
                     }
@@ -202,7 +203,8 @@ class _DataScreenState extends State<DataScreen> {
                     Navigator.pop(context);
 
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(success ? (item != null ? "Updated!" : "Created!") : "Failed"),
+                      content:
+                      Text(success ? (item != null ? "Updated!" : "Created!") : "Failed"),
                     ));
 
                     if (success) fetchData();
@@ -221,30 +223,6 @@ class _DataScreenState extends State<DataScreen> {
     );
   }
 
-  Future<void> exportExcel() async {
-    if (data.isEmpty) return;
-
-    var excel = Excel.createExcel();
-    Sheet sheet = excel['Sheet1'];
-
-    sheet.appendRow(data[0].keys.map((k) => k.toString()).toList());
-
-    for (var item in data) {
-      sheet.appendRow(item.values.map((v) => v.toString()).toList());
-    }
-
-    Directory directory = await getApplicationDocumentsDirectory();
-    String filePath = "${directory.path}/${widget.title}.xlsx";
-
-    File(filePath)
-      ..createSync(recursive: true)
-      ..writeAsBytesSync(excel.encode()!);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Excel exported: $filePath")),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     int totalPages = (filteredData.length / perPage).ceil();
@@ -256,9 +234,6 @@ class _DataScreenState extends State<DataScreen> {
       appBar: AppBar(
         title: Text(widget.title),
         backgroundColor: Colors.deepPurple,
-        actions: [
-          IconButton(icon: const Icon(Icons.file_download), onPressed: exportExcel),
-        ],
       ),
       body: RefreshIndicator(
         onRefresh: refreshPage,
@@ -270,7 +245,9 @@ class _DataScreenState extends State<DataScreen> {
             Center(child: CircularProgressIndicator()),
           ],
         )
-            : Column(
+            : ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(8),
           children: [
             if (!isConnected)
               const Padding(
@@ -280,71 +257,62 @@ class _DataScreenState extends State<DataScreen> {
                   style: TextStyle(color: Colors.red),
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: TextField(
-                controller: searchController,
-                decoration: InputDecoration(
-                  hintText: "Search...",
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onChanged: filterData,
+            TextField(
+              controller: searchController,
+              decoration: InputDecoration(
+                hintText: "Search...",
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
+              onChanged: filterData,
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columns: data.isNotEmpty
-                      ? [
-                    ...data[0].keys
-                        .map((key) => DataColumn(
-                        label: Text(key.toString(),
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold))))
-                        .toList(),
-                    const DataColumn(label: Text('Actions')),
-                  ]
-                      : [],
-                  rows: pageData
-                      .map(
-                        (item) => DataRow(cells: [
-                      ...item.values
-                          .map((value) => DataCell(Text(value.toString())))
-                          .toList(),
-                      DataCell(Row(
-                        children: [
-                          IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => openForm(item: item)),
-                          IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => confirmDelete(item['id'])),
-                        ],
-                      )),
-                    ]),
-                  )
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: data.isNotEmpty
+                    ? [
+                  ...data[0].keys
+                      .map((key) => DataColumn(
+                      label: Text(key.toString(),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold))))
                       .toList(),
-                ),
+                  const DataColumn(label: Text('Actions')),
+                ]
+                    : [],
+                rows: pageData
+                    .map(
+                      (item) => DataRow(cells: [
+                    ...item.values.map((value) => DataCell(Text(value.toString()))).toList(),
+                    DataCell(Row(
+                      children: [
+                        IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => openForm(item: item)),
+                        IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => confirmDelete(item['id'])),
+                      ],
+                    ))
+                  ]),
+                )
+                    .toList(),
               ),
             ),
+            const SizedBox(height: 10),
             if (totalPages > 1)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed:
-                    currentPage > 1 ? () => setState(() => currentPage--) : null,
-                  ),
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: currentPage > 1 ? () => setState(() => currentPage--) : null),
                   Text("Page $currentPage / $totalPages"),
                   IconButton(
-                    icon: const Icon(Icons.chevron_right),
-                    onPressed: currentPage < totalPages
-                        ? () => setState(() => currentPage++)
-                        : null,
-                  ),
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed:
+                      currentPage < totalPages ? () => setState(() => currentPage++) : null),
                 ],
               ),
           ],
